@@ -1,0 +1,430 @@
+<title>在庫と献立のドメインモデル</title>
+<style>
+  :root{
+    --ground:#F6F8F6; --surface:#FFFFFF; --surface-2:#EEF2EF;
+    --ink:#1A231F; --ink-2:#3D4A44; --muted:#63716A;
+    --line:#DCE3DE; --line-strong:#C3CEC7;
+    --accent:#0F6B5F; --accent-soft:#E2F0EC;
+    --core:#9C5A05; --core-soft:#F7EBD8;
+    --code-bg:#EDF1EE;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#11150F; --surface:#191F1B; --surface-2:#212925;
+      --ink:#E9EFEA; --ink-2:#C3CEC7; --muted:#93A198;
+      --line:#2B3531; --line-strong:#3C4A44;
+      --accent:#54C3B0; --accent-soft:#16302C;
+      --core:#E2A94A; --core-soft:#33280F;
+      --code-bg:#212925;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#11150F; --surface:#191F1B; --surface-2:#212925;
+    --ink:#E9EFEA; --ink-2:#C3CEC7; --muted:#93A198;
+    --line:#2B3531; --line-strong:#3C4A44;
+    --accent:#54C3B0; --accent-soft:#16302C;
+    --core:#E2A94A; --core-soft:#33280F;
+    --code-bg:#212925;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+    font-size:15px; line-height:1.85; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px; margin:0 auto; padding:56px 24px 96px}
+
+  h1,h2,h3{font-family:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif; font-weight:600; text-wrap:balance; margin:0}
+  h1{font-size:2.5rem; line-height:1.3; letter-spacing:.01em}
+  h2{font-size:1.5rem; line-height:1.4}
+  h3{font-size:1.1rem; line-height:1.5}
+  p{margin:0}
+  code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86em}
+  code{background:var(--code-bg); padding:.12em .38em; border-radius:3px; color:var(--ink-2)}
+
+  header.head{display:flex; flex-direction:column; gap:16px; padding-bottom:32px; border-bottom:2px solid var(--line-strong)}
+  .eyebrow{font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  .lede{color:var(--ink-2); max-width:64ch; font-size:1.02rem}
+  .meta{display:flex; flex-wrap:wrap; gap:8px 20px; font-size:.8rem; color:var(--muted)}
+
+  section{margin-top:56px; scroll-margin-top:20px}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin-bottom:8px}
+  .sec-num{font-family:"JetBrains Mono",monospace; font-size:.8rem; color:var(--accent); font-weight:500; padding-top:.35em}
+  .sec-note{color:var(--muted); font-size:.92rem; max-width:70ch; margin-bottom:24px}
+
+  nav.toc{display:flex; flex-wrap:wrap; gap:6px; margin:28px 0 0}
+  nav.toc a{font-size:.82rem; color:var(--ink-2); text-decoration:none; padding:5px 11px; border:1px solid var(--line); border-radius:100px; background:var(--surface)}
+  nav.toc a:hover{border-color:var(--accent); color:var(--accent)}
+  nav.toc a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  .grid{display:grid; gap:14px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:18px 20px; display:flex; flex-direction:column; gap:9px}
+  .card.core{border-color:var(--core); border-width:1.5px; background:var(--core-soft)}
+  .card h3{font-family:"Noto Sans JP",sans-serif; font-weight:700; font-size:.98rem}
+  .card p{font-size:.88rem; color:var(--ink-2); line-height:1.75}
+
+  .tag{display:inline-block; font-size:.68rem; letter-spacing:.08em; font-weight:700; padding:3px 8px; border-radius:3px; background:var(--surface-2); color:var(--muted); width:fit-content}
+  .tag.core{background:var(--core); color:#fff}
+  .tag.acc{background:var(--accent); color:#fff}
+
+  figure{margin:28px 0 0; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:22px}
+  figure svg{display:block; width:100%; height:auto; max-width:100%; color:var(--ink-2)}
+  figcaption{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); font-size:.84rem; color:var(--muted); line-height:1.7}
+
+  .tbl-wrap{overflow-x:auto; margin-top:20px; border:1px solid var(--line); border-radius:8px; background:var(--surface)}
+  table{border-collapse:collapse; width:100%; font-size:.86rem; min-width:600px}
+  th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.7}
+  th{font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:700; background:var(--surface-2); white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td.mono{font-size:.8rem; color:var(--accent); white-space:nowrap}
+
+  .agg{background:var(--surface); border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-top:16px}
+  .agg-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:13px 18px; background:var(--surface-2); border-bottom:1px solid var(--line)}
+  .agg-head strong{font-size:.98rem}
+  .agg-head .mono{color:var(--accent); font-size:.82rem}
+  .agg-body{padding:16px 18px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .agg-body h4{margin:0 0 7px; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .agg-body ul{margin:0; padding-left:1.1em; font-size:.85rem; color:var(--ink-2); line-height:1.75}
+  .agg-body li{margin-bottom:3px}
+
+  .rule{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; padding:14px 18px; margin-top:12px}
+  .rule strong{display:block; font-size:.9rem; margin-bottom:4px}
+  .rule p{font-size:.87rem; color:var(--ink-2)}
+  .rule.warn{border-left-color:var(--core)}
+
+  .prov{font-size:.8rem; color:var(--muted); border:1px dashed var(--line-strong); border-radius:6px; padding:11px 15px; margin-top:16px}
+
+  footer{margin-top:72px; padding-top:24px; border-top:1px solid var(--line); font-size:.8rem; color:var(--muted); line-height:1.8}
+  @media (prefers-reduced-motion:no-preference){nav.toc a{transition:border-color .15s,color .15s}}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho+B1:wght@600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<div class="wrap">
+
+<header class="head">
+  <span class="eyebrow">戦略的ドメイン駆動設計</span>
+  <h1>在庫と献立のドメインモデル</h1>
+  <p class="lede">冷蔵庫の在庫を起点に献立を提案するアプリケーションの、サブドメイン分類・境界づけられたコンテキスト・集約と不変条件。実装時の判断の余地をできるだけ潰すことを目的とする。アーキテクチャ上の決定は<a href="https://claude.ai/code/artifact/4d919f03-6a63-4dbe-99ca-dc7c2af7a881" style="color:var(--accent)">アーキテクチャ決定録</a>にある。</p>
+  <div class="meta">
+    <span>ドラフト v0.1</span><span>2026-09-06</span><span>要件定義書 v0.3 に対応</span><span>ユビキタス言語は暫定</span>
+  </div>
+  <nav class="toc">
+    <a href="#s1">1 サブドメイン</a><a href="#s2">2 コンテキストマップ</a><a href="#s3">3 ユビキタス言語</a>
+    <a href="#s4">4 集約</a><a href="#s5">5 献立案の状態</a><a href="#s6">6 確定事項</a><a href="#s7">7 未決</a>
+  </nav>
+</header>
+
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">01</span><h2>サブドメインの分類</h2></div>
+  <p class="sec-note">どこに労力を注ぎ、どこを既製品で済ませるかの判断。<strong>献立提案だけがコアドメイン</strong>であり、在庫管理はその入力を供給する支援に過ぎない。在庫管理そのものを作り込むと、目的（献立を考える手間の解消）から逸れる。</p>
+  <div class="grid g4">
+    <div class="card core">
+      <span class="tag core">コアドメイン</span>
+      <h3>献立提案</h3>
+      <p>在庫を制約として献立を生み、提示し、記憶する。差別化の源泉であり、設計とテストの投資先。</p>
+    </div>
+    <div class="card">
+      <span class="tag">支援サブドメイン</span>
+      <h3>在庫管理</h3>
+      <p>コアへの入力を供給する。汎用品では代替できないが、それ自体は価値を生まない。素朴に作る。</p>
+    </div>
+    <div class="card">
+      <span class="tag">汎用サブドメイン</span>
+      <h3>食材カタログ</h3>
+      <p>食材名の正規化・別名・カテゴリ。既製のデータで代替可能。自作しない。</p>
+    </div>
+    <div class="card">
+      <span class="tag">汎用サブドメイン</span>
+      <h3>アカウント・世帯</h3>
+      <p>認証と世帯の識別。外部の認証基盤に委譲し、自前で持つのは世帯の識別子のみ。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">02</span><h2>境界づけられたコンテキストとコンテキストマップ</h2></div>
+  <p class="sec-note">4つのコンテキストに分ける。MVP では単一デプロイのモジュラーモノリスとして実装し、コンテキスト間はモジュール境界として表現する（ADR-004）。</p>
+
+  <figure>
+    <svg viewBox="0 0 900 430" role="img" aria-label="4つの境界づけられたコンテキストの関係図。在庫コンテキストが献立コンテキストに在庫スナップショットを供給し、献立コンテキストは腐敗防止層を介してLLMを利用する。">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="arc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--core)"/>
+        </marker>
+      </defs>
+
+      <!-- 食材カタログ -->
+      <rect x="20" y="30" width="200" height="80" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1"/>
+      <text x="120" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">食材カタログ</text>
+      <text x="120" y="80" text-anchor="middle" font-size="11" fill="var(--muted)">汎用サブドメイン</text>
+      <text x="120" y="96" text-anchor="middle" font-size="11" fill="var(--muted)">Ingredient</text>
+
+      <!-- 在庫 -->
+      <rect x="20" y="185" width="200" height="100" rx="6" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="120" y="217" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">在庫コンテキスト</text>
+      <text x="120" y="237" text-anchor="middle" font-size="11" fill="var(--muted)">支援サブドメイン</text>
+      <text x="120" y="256" text-anchor="middle" font-size="11" fill="var(--muted)">StockItem</text>
+      <text x="120" y="273" text-anchor="middle" font-size="11" fill="var(--muted)">上流 / 供給者</text>
+
+      <!-- 献立 (core) -->
+      <rect x="410" y="140" width="240" height="150" rx="6" fill="var(--core-soft)" stroke="var(--core)" stroke-width="2"/>
+      <text x="530" y="172" text-anchor="middle" font-size="15" font-weight="700" fill="var(--core)">献立コンテキスト</text>
+      <text x="530" y="192" text-anchor="middle" font-size="11" font-weight="700" fill="var(--core)">コアドメイン</text>
+      <text x="530" y="218" text-anchor="middle" font-size="11" fill="currentColor">MealIdea / Suggestion</text>
+      <text x="530" y="236" text-anchor="middle" font-size="11" fill="currentColor">CookingRecord</text>
+      <text x="530" y="262" text-anchor="middle" font-size="11" fill="var(--muted)">下流 / 顧客</text>
+      <text x="530" y="279" text-anchor="middle" font-size="11" fill="var(--muted)">腐敗防止層を持つ</text>
+
+      <!-- LLM -->
+      <rect x="740" y="165" width="140" height="100" rx="6" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="5 4"/>
+      <text x="810" y="200" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">LLM</text>
+      <text x="810" y="220" text-anchor="middle" font-size="11" fill="var(--muted)">Claude API</text>
+      <text x="810" y="240" text-anchor="middle" font-size="11" fill="var(--muted)">外部システム</text>
+
+      <!-- アカウント -->
+      <rect x="290" y="350" width="480" height="62" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1"/>
+      <text x="530" y="376" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">アカウント・世帯コンテキスト</text>
+      <text x="530" y="396" text-anchor="middle" font-size="11" fill="var(--muted)">共有カーネルとして HouseholdId のみを全コンテキストに公開する</text>
+
+      <!-- arrows -->
+      <line x1="120" y1="110" x2="120" y2="180" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="132" y="140" font-size="11" fill="var(--muted)">名寄せに使う</text>
+      <text x="132" y="156" font-size="11" fill="var(--muted)">（順応者）</text>
+
+      <line x1="222" y1="230" x2="405" y2="212" stroke="var(--core)" stroke-width="2" marker-end="url(#arc)"/>
+      <text x="313" y="205" text-anchor="middle" font-size="11" font-weight="700" fill="var(--core)">在庫スナップショットを供給</text>
+      <text x="313" y="246" text-anchor="middle" font-size="11" fill="var(--muted)">顧客 / 供給者</text>
+
+      <line x1="738" y1="215" x2="655" y2="215" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+      <text x="696" y="200" text-anchor="middle" font-size="11" fill="var(--muted)">献立案</text>
+      <text x="696" y="240" text-anchor="middle" font-size="11" fill="var(--muted)">ACL 経由</text>
+
+      <path d="M120,287 L120,381 L288,381" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3"/>
+      <path d="M530,292 L530,348" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3"/>
+    </svg>
+    <figcaption>在庫が上流、献立が下流。献立側の必要（期限の近い在庫を優先したい）が、在庫側の公開インターフェースを規定する。LLM は外部システムであり、腐敗防止層を通してのみ献立コンテキストに入る — LLM の応答形式のブレをドメインモデルに侵入させないための境界。</figcaption>
+  </figure>
+
+  <div class="rule">
+    <strong>腐敗防止層（ACL）が守るもの</strong>
+    <p>LLM は形式の揺れた出力を返しうる。ACL は「LLM の応答 JSON」を「<code>MealIdea</code> のドメインオブジェクト」に変換し、変換に失敗したものは<strong>ドメイン層に一切渡さない</strong>。ドメイン層のどこにも、LLM・プロンプト・JSON という語が現れてはならない。</p>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">03</span><h2>ユビキタス言語（暫定）</h2></div>
+  <p class="sec-note">日本語の語と、コード上の識別子を1対1で固定する。<strong>この表にない語をコードに登場させない。</strong>「レシピ」「メニュー」「候補」といった同義語の混在が、AI 実装で最も曖昧性を生む。用語は別途調整するため暫定とする。</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>日本語</th><th>識別子</th><th>定義</th><th>コンテキスト</th></tr></thead>
+      <tbody>
+        <tr><td><strong>献立案</strong></td><td class="mono">MealIdea</td><td>生成された1つの献立。名称・材料・手順を持ち、永続化される。「以前見た献立」「以前つくった献立」として再表示される実体はこれ。</td><td>献立</td></tr>
+        <tr><td><strong>提案</strong></td><td class="mono">Suggestion</td><td>1回の生成でまとめて得られた献立案の束（3件）と、そのときの在庫スナップショット。</td><td>献立</td></tr>
+        <tr><td><strong>材料</strong></td><td class="mono">MealIngredient</td><td>献立案が必要とする食材と分量。献立案の一部として複製され、以後は在庫の変化に影響されない。</td><td>献立</td></tr>
+        <tr><td><strong>手順</strong></td><td class="mono">CookingStep</td><td>調理の1ステップ。順序を持つ。</td><td>献立</td></tr>
+        <tr><td><strong>調理記録</strong></td><td class="mono">CookingRecord</td><td>献立案を実際に作ったという記録。追加のみで、取り消さない。</td><td>献立</td></tr>
+        <tr><td><strong>在庫スナップショット</strong></td><td class="mono">PantrySnapshot</td><td>生成時点の在庫の複製。以後不変。同じ在庫での再生成を避ける判定に使う。</td><td>献立</td></tr>
+        <tr><td><strong>充足</strong></td><td class="mono">MealCoverage</td><td>ある献立案の材料が、現在の在庫でどれだけ賄えるか。永続化せず都度算出する。</td><td>献立</td></tr>
+        <tr><td><strong>在庫品</strong></td><td class="mono">StockItem</td><td>冷蔵庫にある1件の食材。名称・数量・期限を持つ。集約ルート。</td><td>在庫</td></tr>
+        <tr><td><strong>期限</strong></td><td class="mono">ExpiryDate</td><td>使い切りたい日。賞味/消費期限は区別しない。未設定を許す。</td><td>在庫</td></tr>
+        <tr><td><strong>分量</strong></td><td class="mono">Amount</td><td>「200g」「1本」など。構造化せず自由文字列として扱う（ADR-010）。</td><td>在庫・献立</td></tr>
+        <tr><td><strong>食材</strong></td><td class="mono">Ingredient</td><td>「にんじん」等の種類を表すカタログ上の概念。在庫品とは別物。</td><td>食材カタログ</td></tr>
+        <tr><td><strong>世帯</strong></td><td class="mono">Household</td><td>冷蔵庫を共有する単位。MVP では常に1利用者1世帯。全データの所有者。</td><td>アカウント</td></tr>
+        <tr><td><strong>利用者</strong></td><td class="mono">User</td><td>認証の主体。</td><td>アカウント</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prov"><strong>避ける語:</strong> レシピ / メニュー / 候補 / 料理 / ストック / アイテム / フード。いずれも上表の語と衝突するため、コード・UI・仕様のどこにも使わない。</div>
+</section>
+
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">04</span><h2>集約と不変条件</h2></div>
+  <p class="sec-note">集約ルートは4つ。<strong>集約をまたぐ参照はすべて識別子で行い、オブジェクト参照を持たない</strong>（ADR-008）。1トランザクションで更新してよいのは1集約まで。</p>
+
+  <div class="agg">
+    <div class="agg-head"><span class="tag core">コア</span><strong>献立案</strong><span class="mono">MealIdea</span></div>
+    <div class="agg-body">
+      <div>
+        <h4>構成</h4>
+        <ul>
+          <li><code>id: MealIdeaId</code></li>
+          <li><code>householdId: HouseholdId</code></li>
+          <li><code>title: string</code> — 献立の名称</li>
+          <li><code>ingredients: MealIngredient[]</code> 値オブジェクト</li>
+          <li><code>steps: CookingStep[]</code> 値オブジェクト</li>
+          <li><code>provenance: 'llm'</code> — 生成元</li>
+          <li><code>generatedAt: DateTime</code></li>
+          <li><code>cookingRecords: CookingRecord[]</code></li>
+        </ul>
+      </div>
+      <div>
+        <h4>不変条件</h4>
+        <ul>
+          <li><code>title</code> は空文字を許さない</li>
+          <li><code>ingredients</code> は1件以上</li>
+          <li><code>steps</code> は1件以上、順序を持つ</li>
+          <li>ちょうど1つの世帯に属し、所属は変わらない</li>
+          <li><code>cookingRecords</code> は<strong>追加のみ</strong>。削除・更新しない</li>
+          <li>生成後、<code>title</code>／<code>ingredients</code>／<code>steps</code> は不変</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="agg">
+    <div class="agg-head"><span class="tag core">コア</span><strong>提案</strong><span class="mono">Suggestion</span></div>
+    <div class="agg-body">
+      <div>
+        <h4>構成</h4>
+        <ul>
+          <li><code>id: SuggestionId</code></li>
+          <li><code>householdId: HouseholdId</code></li>
+          <li><code>mealIdeaIds: MealIdeaId[]</code> — <strong>ID 参照</strong></li>
+          <li><code>pantrySnapshot: PantrySnapshot</code> 値オブジェクト</li>
+          <li><code>generatedAt: DateTime</code></li>
+        </ul>
+      </div>
+      <div>
+        <h4>不変条件</h4>
+        <ul>
+          <li><code>mealIdeaIds</code> はちょうど3件</li>
+          <li>参照する献立案は同じ世帯に属する</li>
+          <li>生成後は完全に不変（追記も削除もしない）</li>
+          <li><code>pantrySnapshot</code> は生成時点の複製であり、以後の在庫変更を反映しない</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="agg">
+    <div class="agg-head"><strong>在庫品</strong><span class="mono">StockItem</span></div>
+    <div class="agg-body">
+      <div>
+        <h4>構成</h4>
+        <ul>
+          <li><code>id: StockItemId</code></li>
+          <li><code>householdId: HouseholdId</code></li>
+          <li><code>name: string</code> — 自由入力を許す</li>
+          <li><code>ingredientId: IngredientId | null</code> — カタログに一致した場合のみ</li>
+          <li><code>amount: Amount | null</code></li>
+          <li><code>expiryDate: ExpiryDate | null</code></li>
+        </ul>
+      </div>
+      <div>
+        <h4>不変条件</h4>
+        <ul>
+          <li><code>name</code> は空文字を許さない</li>
+          <li>同じ食材でも<strong>統合しない</strong>。買った日が違えば別の在庫品（ADR-007）</li>
+          <li><code>expiryDate</code> が未設定の在庫品は、期限による警告・優先の対象外</li>
+          <li>削除は物理削除でよい。献立案は材料を複製済みで参照を持たない</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="agg">
+    <div class="agg-head"><strong>食材</strong><span class="mono">Ingredient</span><span class="tag">カタログ</span></div>
+    <div class="agg-body">
+      <div><h4>構成</h4><ul><li><code>id: IngredientId</code></li><li><code>canonicalName: string</code></li><li><code>aliases: string[]</code></li><li><code>category: IngredientCategory</code></li></ul></div>
+      <div><h4>不変条件</h4><ul><li>読み取り専用。アプリケーションから更新しない</li><li><code>canonicalName</code> は全体で一意</li></ul></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:36px">ドメインサービスとポート</h3>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <span class="tag acc">ドメインサービス</span>
+      <h3><span class="mono">MealCoverageService</span></h3>
+      <p>献立案と現在の在庫品リストを受け取り、賄える材料と不足する材料を返す。純粋関数であり、副作用も永続化も持たない。</p>
+    </div>
+    <div class="card">
+      <span class="tag acc">ポート（インターフェース）</span>
+      <h3><span class="mono">MealIdeaGenerator</span></h3>
+      <p>在庫スナップショットを受け取り、献立案3件を返す。<strong>ドメイン層に定義し、インフラ層が LLM で実装する</strong>。依存の向きが逆転する要（ADR-002）。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">05</span><h2>献立案の状態 —「見た」と「つくった」</h2></div>
+  <p class="sec-note">「以前見た献立」と「以前つくった献立」を<strong>別のフラグとして持たない</strong>。調理記録の有無から導出する。状態を二重に持つと必ず食い違うため、単一の事実（調理記録）だけを保存する。</p>
+
+  <figure>
+    <svg viewBox="0 0 790 245" role="img" aria-label="献立案の状態遷移図。生成された献立案は提案済み状態になり、調理記録が追加されると調理済みになる。状態は戻らない。">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <circle cx="50" cy="90" r="9" fill="currentColor"/>
+      <text x="50" y="122" text-anchor="middle" font-size="11" fill="var(--muted)">生成</text>
+
+      <rect x="140" y="50" width="230" height="82" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="255" y="80" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">提案済み</text>
+      <text x="255" y="100" text-anchor="middle" font-size="11" fill="var(--muted)">cookingRecords.length === 0</text>
+      <text x="255" y="119" text-anchor="middle" font-size="11" fill="var(--muted)">UI:「以前見た献立」</text>
+
+      <rect x="500" y="50" width="230" height="82" rx="6" fill="var(--core-soft)" stroke="var(--core)" stroke-width="2"/>
+      <text x="615" y="80" text-anchor="middle" font-size="14" font-weight="700" fill="var(--core)">調理済み</text>
+      <text x="615" y="100" text-anchor="middle" font-size="11" fill="currentColor">cookingRecords.length &gt;= 1</text>
+      <text x="615" y="119" text-anchor="middle" font-size="11" fill="currentColor">UI:「つくった献立」</text>
+
+      <line x1="64" y1="90" x2="135" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <line x1="372" y1="90" x2="495" y2="90" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <text x="433" y="80" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor">調理を記録</text>
+
+      <path d="M 560 138 C 542 184, 688 184, 670 138" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <text x="615" y="212" text-anchor="middle" font-size="11" fill="var(--muted)">もう一度作る（記録が増えるだけ）</text>
+
+      <text x="415" y="30" text-anchor="middle" font-size="11" fill="var(--muted)">状態は戻らない。調理記録は取り消せない。</text>
+    </svg>
+    <figcaption>「見た」は生成と同時に成立する — 生成した3件は必ずすべて提示するため、提示済みフラグは不要（確定事項 C-2）。したがって永続化される事実は調理記録だけであり、2つの一覧はどちらもその有無による絞り込みで実装できる。</figcaption>
+  </figure>
+</section>
+
+<section id="s6">
+  <div class="sec-head"><span class="sec-num">06</span><h2>曖昧性を排除するための確定事項</h2></div>
+  <p class="sec-note">実装時に判断を求められそうな箇所を、あらかじめ潰しておく。<strong>ここに書かれていることは実装者（AI を含む）が勝手に変えてよいものではない。</strong></p>
+
+  <div class="rule"><strong>C-1　生成した献立案は必ず永続化する</strong><p>LLM の応答を画面に出すだけで捨ててはならない。ACL で <code>MealIdea</code> に変換した時点で保存する。保存に失敗した献立案は、ユーザーに提示しない。</p></div>
+  <div class="rule"><strong>C-2　生成した3件はすべて提示する</strong><p>生成件数と提示件数は常に等しい。「生成したが見せていない献立案」は存在しない。これにより提示済みフラグが不要になる。</p></div>
+  <div class="rule"><strong>C-3　献立案は生成後に編集できない</strong><p>名称・材料・手順は不変。ユーザーが手を加えたい場合の要件は MVP に存在しない。追加されるのは調理記録のみ。</p></div>
+  <div class="rule"><strong>C-4　同じ内容の献立案を重複排除しない</strong><p>「豚こまと白菜の中華炒め」が別の日に再度生成されても、別の <code>MealIdea</code> として保存する。意味的な同一性判定は MVP では行わない。名称の完全一致による抑制も行わない。</p></div>
+  <div class="rule"><strong>C-5　材料は在庫品を参照せず、文字列として複製する</strong><p><code>MealIngredient</code> は <code>StockItemId</code> を持たない。在庫品が削除されても献立案は壊れない。充足判定は名称の突き合わせで都度行う。</p></div>
+  <div class="rule warn"><strong>C-6　充足判定は名称の完全一致で行う（MVP）</strong><p>「豚こま肉」と「豚こま」は一致しないものとして扱う。表記ゆれの吸収は食材カタログの別名機能に委ね、それでも漏れるものは不足材料として表示する。<strong>これは既知の割り切りであり、精度の問題が出たときに見直す。</strong></p></div>
+  <div class="rule"><strong>C-7　再生成の判定は在庫スナップショットの一致で行う</strong><p>最新の <code>Suggestion.pantrySnapshot</code> が現在の在庫と一致する場合、生成 API を呼ばず保存済みの献立案を返す。一致判定は在庫品の <code>(name, amount, expiryDate)</code> の集合比較とする。<code>id</code> は比較に含めない。</p></div>
+  <div class="rule"><strong>C-8　調理記録は在庫を自動で減らさない</strong><p>「作った」を記録しても在庫品は自動削除されない。何をどれだけ使ったかを正しく推定できないため。在庫の消費はユーザーが在庫画面で明示的に行う。</p></div>
+  <div class="rule"><strong>C-9　世帯 ID はすべての集約が保持する</strong><p>4つの集約ルートすべてが <code>householdId</code> を持ち、リポジトリの全メソッドは <code>householdId</code> を必須引数に取る。世帯をまたぐ取得を、型として不可能にする。</p></div>
+</section>
+
+<section id="s7">
+  <div class="sec-head"><span class="sec-num">07</span><h2>未決の論点</h2></div>
+  <p class="sec-note">確定していないもの。ここを勝手に決めて実装を進めないこと。</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>#</th><th>論点</th><th>影響</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">Q-1</td><td>ユビキタス言語の最終決定。特に <code>MealIdea</code> の日本語（献立案 / 献立 / お品書き）と、UI 上の「以前見た献立」の呼び方。</td><td>全レイヤーの命名。<strong>実装開始前に確定させる必要がある。</strong></td></tr>
+        <tr><td class="mono">Q-2</td><td>献立案の保持期間。無制限に貯めるか、一定期間で削除するか。</td><td>ストレージ費用と、履歴一覧の設計。</td></tr>
+        <tr><td class="mono">Q-3</td><td>提案が3件固定でよいか。在庫が少ないときに3件出せない場合の扱い。</td><td><code>Suggestion</code> の不変条件。現状は「ちょうど3件」としている。</td></tr>
+        <tr><td class="mono">Q-4</td><td>食材カタログの初期データの出所と件数。</td><td>C-6 の充足判定の精度に直結する。</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  ドラフト v0.1 / 2026-09-06。要件定義書 v0.3（<code>docs/fridge-app/requirements.md</code>）および<a href="https://claude.ai/code/artifact/4d919f03-6a63-4dbe-99ca-dc7c2af7a881" style="color:var(--accent)">アーキテクチャ決定録</a>に対応。<br>
+  ユビキタス言語は暫定であり、Q-1 の決定をもって本書を改訂する。
+</footer>
+
+</div>
