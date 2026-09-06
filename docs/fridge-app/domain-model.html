@@ -357,7 +357,7 @@
     <div class="card">
       <span class="tag acc">ポート（インターフェース）</span>
       <h3><span class="mono">MealGenerator</span></h3>
-      <p>在庫スナップショットと必要件数を受け取り、献立を返す。<strong>ドメイン層に定義し、インフラ層が LLM で実装する</strong>。依存の向きが逆転する要（ADR-002）。</p>
+      <p>在庫スナップショット・必要件数・<strong>避けるべき献立名</strong>を受け取り、献立を返す。ドメイン層に定義し、インフラ層が LLM で実装する。依存の向きが逆転する要（ADR-002）。</p>
     </div>
   </div>
 </section>
@@ -474,6 +474,8 @@
 
   <div class="rule"><strong>再利用は隠さない</strong>
     <p>再利用した献立は <code>SuggestionEntry.origin</code> が <code>'reused'</code> となり、UI 上も新規生成と区別して示す。黙って混ぜると「なぜ同じ献立がまた出るのか」としか映らない。<strong>「前に見たこれ、今日の在庫で作れます」という提示にして初めて価値になる。</strong></p></div>
+  <div class="rule"><strong>生成する分にも既存の献立名を渡す</strong>
+    <p>不足分を LLM に生成させるとき、<strong>すでに手元にある献立の名前を渡して「これらとは違うものを」と指示する</strong>（ADR-021）。再利用と新規生成が同じ料理を指してしまうと、3件並べた意味がなくなる。渡す件数には上限を設ける — 蓄積に比例して入力トークンが増え、せっかくの削減効果を打ち消すため。</p></div>
   <div class="rule warn"><strong>再利用の判定は充足と同じ弱点を持つ</strong>
     <p><code>CookableMealFinder</code> は <code>MealCoverageService</code> の結果に依存するため、確定事項 C-6（名称の完全一致）の制約をそのまま引き継ぐ。表記ゆれで一致しなければ「作れない」と判定され、再利用の機会を逃す。<strong>再利用率が上がらない場合、まず疑うのは食材カタログの別名データである。</strong></p></div>
 </section>
@@ -485,7 +487,8 @@
   <div class="rule"><strong>C-1　生成した献立は必ず永続化する</strong><p>LLM の応答を画面に出すだけで捨ててはならない。ACL で <code>Meal</code> に変換した時点で保存する。保存に失敗した献立は、ユーザーに提示しない。</p></div>
   <div class="rule"><strong>C-2　生成した3件はすべて提示する</strong><p>生成件数と提示件数は常に等しい。「生成したが見せていない献立」は存在しない。これにより提示済みフラグが不要になる。</p></div>
   <div class="rule"><strong>C-3　献立は生成後に編集できない</strong><p>名称・材料・手順は不変。ユーザーが手を加えたい場合の要件は MVP に存在しない。追加されるのは調理記録のみ。</p></div>
-  <div class="rule"><strong>C-4　同じ内容の献立を重複排除しない</strong><p>「豚こまと白菜の中華炒め」が別の日に再度生成されても、別の <code>Meal</code> として保存する。意味的な同一性判定は MVP では行わない。名称の完全一致による抑制も行わない。</p></div>
+  <div class="rule"><strong>C-4　重複は生成時にプロンプトで避け、名称の完全一致のみ既存を参照する</strong><p>既存の献立名をプロンプトに渡して重複を避けさせる（ADR-021）。それでも<strong>名称が完全一致した生成結果は、新規保存せず既存の献立を参照する</strong>。その要素の <code>origin</code> は <code>'reused'</code> とする — 生成しはしたが、利用者にとっては前に見た献立だからである。<br><strong>意味的な重複（表記の違う同じ料理）は引き続き検出しない。</strong>プロンプトでの回避に委ね、漏れたものは別の献立として保存する。</p></div>
+  <div class="rule warn"><strong>C-4b　C-11 の除外を、生成結果の一致がすり抜けうる</strong><p>C-11 で再利用対象から外した献立と同じ名称を LLM が生成した場合、C-4 により既存が参照され、除外したはずのものが提案に戻る。<strong>これは既知の穴であり、稀なので許容する。</strong>塞ぐには生成結果を破棄して再試行することになるが、費用と待ち時間に見合わない。</p></div>
   <div class="rule"><strong>C-5　材料は在庫品を参照せず、文字列として複製する</strong><p><code>MealIngredient</code> は <code>StockItemId</code> を持たない。在庫品が削除されても献立は壊れない。充足判定は名称の突き合わせで都度行う。</p></div>
   <div class="rule warn"><strong>C-6　充足判定は名称の完全一致で行う（MVP）</strong><p>「豚こま肉」と「豚こま」は一致しないものとして扱う。表記ゆれの吸収は食材カタログの別名機能に委ね、それでも漏れるものは不足材料として表示する。<strong>これは既知の割り切りであり、精度の問題が出たときに見直す。</strong></p></div>
   <div class="rule"><strong>C-7　再生成の判定は在庫スナップショットの一致で行う</strong><p>最新の <code>Suggestion.pantrySnapshot</code> が現在の在庫と一致する場合、生成 API を呼ばず保存済みの献立を返す。一致判定は在庫品の <code>(name, amount, expiryDate)</code> の集合比較とする。<code>id</code> は比較に含めない。</p></div>
@@ -510,6 +513,7 @@
         <tr><td class="mono">Q-3</td><td>提案が3件固定でよいか。在庫が少なく生成しても3件に満たない場合の扱い。</td><td><code>Suggestion</code> の不変条件。現状は「ちょうど3件」としている。</td></tr>
         <tr><td class="mono">Q-4</td><td>食材カタログの初期データの出所と件数。</td><td>C-6 の充足判定、ひいては<strong>再利用率に直結する</strong>。ここが弱いと第6章の仕組みが働かない。</td></tr>
         <tr><td class="mono">Q-5</td><td>C-11 の除外期間「直近3回」が妥当か。</td><td>短すぎると同じ献立が続き、長すぎると再利用の機会を失う。実際に使ってから調整する。</td></tr>
+        <tr><td class="mono">Q-6</td><td>ADR-021 でプロンプトに渡す既存献立名の上限「50件」が妥当か。</td><td>少なすぎると重複が増え、多すぎると入力トークンが増える。プロンプト設計の試行で調整する。</td></tr>
       </tbody>
     </table>
   </div>

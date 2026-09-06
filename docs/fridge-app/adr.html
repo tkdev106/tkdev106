@@ -109,7 +109,7 @@
   <span class="eyebrow">Architecture Decision Records</span>
   <h1>献立アプリ アーキテクチャ決定録</h1>
   <p class="lede"><a href="https://claude.ai/code/artifact/e5ff25a5-ae8a-4932-baea-64d443c35856">ドメインモデル</a>と対になる文書。コンテキストごとの垂直分割とオニオンアーキテクチャ、その帰結として守るべき依存ルール。ドメイン層とインフラ層の依存関係逆転、プレゼンテーション層からの独立、技術スタックの選定を、実装が曖昧にできない粒度まで固定する。</p>
-  <div class="meta"><span>ドラフト v0.2</span><span>2026-09-06</span><span>ADR-001 〜 ADR-018</span></div>
+  <div class="meta"><span>ドラフト v0.2</span><span>2026-09-06</span><span>ADR-001 〜 ADR-021</span></div>
 </header>
 
 <section>
@@ -345,6 +345,16 @@
 └─ <b>packages/contract/</b>         <span>API の型定義。web と api で共有する</span>
 
 <i>斜体</i> のディレクトリは interface だけを置く。<b>domain/ は何も import しない。</b></pre>
+
+  <div class="adr" style="margin-top:20px">
+    <div class="adr-head"><span class="tag" style="background:var(--no);color:#fff">よくある誤解</span><strong><code>usecase/</code> は <code>domain/</code> の下ではない</strong></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>誤り</dt><dd><code>contexts/meal/domain/usecase/</code> — ユースケースをドメイン層の中に置く形。</dd></div>
+      <div class="adr-row"><dt>正しい</dt><dd><code>contexts/meal/usecase/</code> — <code>domain/</code> と<strong>兄弟</strong>に置く。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>依存の向きが <code>usecase/ → domain/</code> の一方向だからである。<code>domain/</code> の中に置くと、ドメイン層が自分の内側にユースケースを抱えることになり、<strong>「ドメイン層は何も import しない」という規則が表現できなくなる</strong>。lint で依存を強制する際も、この2つが別ディレクトリであることが前提になる。</dd></div>
+      <div class="adr-row"><dt>語の整理</dt><dd>「ドメイン」が2つの意味で使われるのが混乱の原因。<strong>業務領域としてのドメイン</strong>（献立・在庫）は <code>contexts/meal/</code> — つまりコンテキストの単位。<strong>層としてのドメイン層</strong>は <code>contexts/meal/domain/</code>。「各ドメインごとにユースケースがある」は正しく、その置き場所が <code>contexts/meal/usecase/</code> である。</dd></div>
+    </dl></div>
+  </div>
 </section>
 
 <section>
@@ -368,6 +378,9 @@
     <a href="#adr-016"><span class="n">ADR-016</span><span>PWA 化する。オフライン対応はアプリシェルに限る</span><span class="s">承認</span></a>
     <a href="#adr-017"><span class="n">ADR-017</span><span>既存の献立の再利用を優先し、LLM 呼び出しを最後の手段とする</span><span class="s">承認</span></a>
     <a href="#adr-018"><span class="n">ADR-018</span><span>ユビキタス言語の中核を「献立 / Meal」とする</span><span class="s">承認</span></a>
+    <a href="#adr-019"><span class="n">ADR-019</span><span>LLM プロバイダを未定のまま進める</span><span class="s">未決（意図的）</span></a>
+    <a href="#adr-020"><span class="n">ADR-020</span><span>データベースと認証を Supabase とする</span><span class="s">承認</span></a>
+    <a href="#adr-021"><span class="n">ADR-021</span><span>生成の重複回避はプロンプトで行い、保証はしない</span><span class="s">承認</span></a>
   </div>
 </section>
 
@@ -551,11 +564,48 @@
       <div class="adr-row"><dt>結果</dt><dd>「レシピ / <code>Recipe</code>」を空けておける。<strong>ADR-006 の移行先である自前レシピ DB を将来持ったとき、<code>Recipe</code>（検証済みの既存レシピ）と <code>Meal</code>（この世帯のために生成された献立）を別概念として導入できる。</strong>いま「レシピ」を使ってしまうと、そのときに名前が足りなくなる。</dd></div>
     </dl></div>
   </div>
+
+  <div class="adr" id="adr-019">
+    <div class="adr-head"><span class="adr-id">ADR-019</span><strong>LLM プロバイダを未定のまま進める</strong><span class="status open">未決（意図的）</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>Claude・Gemini など複数の候補がある。一方、生成は <code>MealGenerator</code> ポートの背後に隔離済みで（ADR-005）、実装は1クラスに閉じている。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd><strong>いま決めない。</strong>プロバイダは差し替え可能な詳細として扱い、他の設計と実装を先に進める。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>早く決めても得るものがない。むしろ<strong>プロンプト設計を固めてから、同じプロンプトを複数のプロバイダに投げて比べたほうが、判断材料が揃う</strong>。ポートと腐敗防止層があることの実際的な見返りが、まさにこの「決定を遅らせられる」ことである。</dd></div>
+      <div class="adr-row"><dt>比較の軸</dt><dd>決定時に見るべき順に、<strong>(1) 構造化出力（JSON）の安定性</strong> — これが最重要。形式が揺れると腐敗防止層の検証失敗が増え、再試行が実質的な追加コストになる。<strong>(2)</strong> 日本語・家庭料理の質。<strong>(3)</strong> 単価。<strong>(4)</strong> レイテンシ（ADR-015 の Workers 実行時間制限に効く）。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>要件定義 6.3 の費用試算は Claude の単価に基づく暫定値であり、決定時に置き換える。<strong>この未決はプロジェクトを止めない</strong> — ドメイン層・ユースケース層・在庫まわりは影響を受けない。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-020">
+    <div class="adr-head"><span class="adr-id">ADR-020</span><strong>データベースと認証を Supabase とする</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>API は Cloudflare Workers 上に置く（ADR-015）。データベースと認証が必要。対抗案は Cloudflare D1 + 自前認証で、こちらはプラットフォームが1つで済む。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>Supabase（Postgres + Auth）を使う。Workers からは <strong>supabase-js（HTTP / PostgREST 経由）</strong>で接続する。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd><strong>(1) 認証を自前で作らずに済む。</strong>MVP の速度に直結する。<strong>(2) 行レベルセキュリティ（RLS）が NFR-09 の安全網になる。</strong>世帯によるデータ分離をアプリコードだけで守る形は、<code>householdId</code> の付け忘れ1箇所で破れる。同じ制約をデータベース側にも置けるのは、対抗案にはない価値である。<strong>(3)</strong> Postgres なので将来の検索・集計で詰まらない。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>4つの帰結を引き受ける。<br>
+        <strong>(1) RLS を効かせるには、Workers から <code>service_role</code> キーではなく利用者の JWT で問い合わせなければならない。</strong><code>service_role</code> は RLS を迂回するため、それを使うと採用理由 (2) が丸ごと消える。<strong>実装上の必須事項であり、ここを外すと Supabase を選んだ意味が半減する。</strong><br>
+        <strong>(2)</strong> Postgres への直接 TCP 接続はエッジ実行と相性が悪く、Hyperdrive のような接続プールを挟む必要がある。<strong>supabase-js の HTTP 経由なら不要</strong>なので当面それで進める。ORM で TCP 接続したくなった時点で再検討する。<br>
+        <strong>(3) 無料プランのプロジェクトは、API リクエストが1週間ないと自動的に一時停止される。</strong>データは保持されるが手動で再開するまで止まる。個人利用で使わない週があると現実に起きる。定期的にアクセスする仕組みを置くか、停止と再開を受け入れるかを決める必要がある。<br>
+        <strong>(4) プラットフォームが2つになる</strong>（Cloudflare と Supabase）。課金もダッシュボードも別。1つにまとめたいなら API を Supabase Edge Functions に寄せる手はあるが、Deno 環境になり Hono を選んだ利点が薄れる。<strong>当面は2つで進め、運用の煩雑さが実際に問題になった時点で見直す。</strong></dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-021">
+    <div class="adr-head"><span class="adr-id">ADR-021</span><strong>生成の重複回避はプロンプトで行い、保証はしない</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>すでに手元にある献立と同じものが再び生成されると、履歴が同じ料理で埋まる。一方、意味的な重複（「豚肉と白菜の炒め物」と「豚こまと白菜の中華炒め」）をコードで判定するのは難しい。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>生成時のプロンプトに<strong>既存の献立名の一覧を含め、それらとは異なるものを生成するよう指示する</strong>。渡す件数には上限を設ける（初期値: 直近50件）。<code>MealGenerator</code> ポートは「在庫スナップショット・必要件数・避けるべき献立名」を受け取る。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>表記の違う同じ料理を見分けられるのは、コードではなく LLM 自身である。判定を自前で持たず、生成側に避けさせるのが最も素直で、実装も増えない。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd><strong>(1) これは best-effort であって保証ではない。</strong>重複が出ても壊れない設計は維持する。<br>
+        <strong>(2) 上限は必ず設ける。</strong>件数に比例して入力トークンが増えるため、上限を外すと蓄積とともに費用が増え、ADR-017 の削減効果を打ち消しかねない。50件なら数百トークン程度で影響は小さい。<br>
+        <strong>(3)</strong> それでも名称が完全一致した場合の扱いを定めた（確定事項 C-4）。新規保存せず既存の献立を参照する。</dd></div>
+    </dl></div>
+  </div>
 </section>
 
 <footer>
   ドラフト v0.1 / 2026-09-06。要件定義書 v0.3（<code>docs/fridge-app/requirements.md</code>）および<a href="https://claude.ai/code/artifact/e5ff25a5-ae8a-4932-baea-64d443c35856">ドメインモデル</a>に対応。<br>
-  決定を変更する場合は、既存の ADR を書き換えず、新しい ADR を起こして旧 ADR の状態を「置き換え済み」に改める。
+  決定を変更する場合は、既存の ADR を書き換えず、新しい ADR を起こして旧 ADR の状態を「置き換え済み」に改める。<br>ADR-019 は<strong>意図的に未決</strong>であり、決定を先送りできること自体が ADR-005 の設計の見返りである。
 </footer>
 
 </div>
