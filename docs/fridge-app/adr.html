@@ -108,8 +108,8 @@
 <header class="head">
   <span class="eyebrow">Architecture Decision Records</span>
   <h1>献立アプリ アーキテクチャ決定録</h1>
-  <p class="lede"><a href="https://claude.ai/code/artifact/e5ff25a5-ae8a-4932-baea-64d443c35856">ドメインモデル</a>と対になる文書。オニオンアーキテクチャの採用と、その帰結として守るべき依存ルール。ドメイン層とインフラ層の依存関係逆転、およびプレゼンテーション層からの独立を、実装が曖昧にできない粒度まで固定する。</p>
-  <div class="meta"><span>ドラフト v0.1</span><span>2026-09-06</span><span>ADR-001 〜 ADR-012</span></div>
+  <p class="lede"><a href="https://claude.ai/code/artifact/e5ff25a5-ae8a-4932-baea-64d443c35856">ドメインモデル</a>と対になる文書。コンテキストごとの垂直分割とオニオンアーキテクチャ、その帰結として守るべき依存ルール。ドメイン層とインフラ層の依存関係逆転、プレゼンテーション層からの独立、技術スタックの選定を、実装が曖昧にできない粒度まで固定する。</p>
+  <div class="meta"><span>ドラフト v0.2</span><span>2026-09-06</span><span>ADR-001 〜 ADR-018</span></div>
 </header>
 
 <section>
@@ -159,10 +159,10 @@
       <text x="450" y="313" text-anchor="middle" font-size="15" font-weight="700" fill="var(--core)">ドメイン層</text>
       <text x="450" y="332" text-anchor="middle" font-size="11" fill="currentColor">エンティティ / 値オブジェクト / 集約 / ドメインサービス</text>
       <rect x="185" y="345" width="250" height="46" rx="4" fill="var(--surface)" stroke="var(--core)" stroke-width="1"/>
-      <text x="310" y="364" text-anchor="middle" font-size="11" fill="currentColor">«interface» MealIdeaRepository</text>
+      <text x="310" y="364" text-anchor="middle" font-size="11" fill="currentColor">«interface» MealRepository</text>
       <text x="310" y="381" text-anchor="middle" font-size="11" fill="currentColor">«interface» StockItemRepository</text>
       <rect x="465" y="345" width="250" height="46" rx="4" fill="var(--surface)" stroke="var(--core)" stroke-width="1"/>
-      <text x="590" y="364" text-anchor="middle" font-size="11" fill="currentColor">«interface» MealIdeaGenerator</text>
+      <text x="590" y="364" text-anchor="middle" font-size="11" fill="currentColor">«interface» MealGenerator</text>
       <text x="590" y="381" text-anchor="middle" font-size="11" fill="var(--muted)">何も import しない層</text>
 
       <!-- DIP arrow: upward -->
@@ -193,8 +193,21 @@
   </div>
   <p class="sec-note" style="margin-top:14px">
     <strong>プレゼンテーション層 → ドメイン層が「禁止」である点に注意。</strong> 外側が内側に依存すること自体はオニオンの原則に反しないが、ここを許すとドメインオブジェクトが画面まで漏れ出し、UI の都合でドメインが変形する。プレゼンテーション層が触れてよいのはアプリケーション層の DTO だけとする。<br>
-    <strong>「起動時の組み立て」</strong>は全層を知る唯一の場所（composition root）。ここでインターフェースに実装を注入する。<code>src/main.ts</code> など1ファイルに限定し、他所で <code>new SupabaseMealIdeaRepository()</code> を書かない。
+    <strong>「起動時の組み立て」</strong>は全層を知る唯一の場所（composition root）。ここでインターフェースに実装を注入する。<code>apps/api/src/main.ts</code> の1ファイルに限定し、他所で <code>new DbMealRepository()</code> を書かない。
   </p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>層の呼び名</th><th>ディレクトリ</th><th>置くもの</th></tr></thead>
+      <tbody>
+        <tr><td class="rowlab">プレゼンテーション層</td><td><code>contexts/*/api/</code> と <code>apps/web/</code></td><td>HTTP ハンドラと UI。どちらも DTO しか触らない</td></tr>
+        <tr><td class="rowlab">アプリケーション層</td><td><code>contexts/*/usecase/</code></td><td>ユースケース。入出力は DTO</td></tr>
+        <tr><td class="rowlab">ドメイン層</td><td><code>contexts/*/domain/</code></td><td>エンティティ・値オブジェクト・ドメインサービスと、リポジトリ／ポートの interface</td></tr>
+        <tr><td class="rowlab">インフラストラクチャ層</td><td><code>contexts/*/infrastructure/</code></td><td>リポジトリとポートの実装</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-note" style="margin-top:12px">層の呼び名とディレクトリ名は<strong>1対1で対応する</strong>。文書では層の名前で、コードではディレクトリ名で呼ぶ。どちらか一方に統一しないのは、層はアーキテクチャの概念、ディレクトリはその実装だからである — この表以外の対応を作らないこと。</p>
 
   <figure>
     <svg viewBox="0 0 900 290" role="img" aria-label="やってはいけない依存と正しい依存の比較図。左はユースケースがHTTPのRequest型を直接受け取る形で、Webフレームワークへの依存がアプリケーション層に侵入している。右はHTTPハンドラがRequestをDTOに変換してからユースケースに渡す形。">
@@ -235,36 +248,103 @@
     <figcaption>ネイティブアプリ対応の可否は、この1点でほぼ決まる。ユースケースの引数と戻り値にフレームワーク由来の型が1つでも現れた時点で、その層は Web に固定される。</figcaption>
   </figure>
 
+  <h2 style="font-size:1.1rem; margin-top:44px; font-family:'Noto Sans JP',sans-serif; font-weight:700">コンテキストをまたぐ依存</h2>
+  <p class="sec-note" style="margin-top:10px">ディレクトリはコンテキストで垂直に切る（ADR-013）。層のルールは<strong>各コンテキストの内側で</strong>成立し、そのうえでコンテキスト間にもう一段の規則が要る。</p>
+
+  <figure>
+    <svg viewBox="0 0 860 330" role="img" aria-label="コンテキストをまたぐ依存の規則。献立コンテキストのユースケース層から在庫コンテキストのユースケース層への呼び出しは許可されるが、ドメイン層どうしの直接参照は禁止。">
+      <defs>
+        <marker id="x1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+      </defs>
+
+      <text x="205" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="var(--core)">contexts/meal/</text>
+      <text x="655" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">contexts/pantry/</text>
+
+      <rect x="60" y="40" width="290" height="38" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1"/>
+      <text x="205" y="64" text-anchor="middle" font-size="12" fill="currentColor">api/</text>
+      <rect x="60" y="84" width="290" height="38" rx="4" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="205" y="108" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">usecase/</text>
+      <rect x="60" y="128" width="290" height="60" rx="4" fill="var(--core-soft)" stroke="var(--core)" stroke-width="1.5"/>
+      <text x="205" y="152" text-anchor="middle" font-size="12" font-weight="700" fill="var(--core)">domain/</text>
+      <text x="205" y="172" text-anchor="middle" font-size="11" fill="currentColor">entity · value · service · repository · port</text>
+      <rect x="60" y="194" width="290" height="38" rx="4" fill="var(--surface)" stroke="currentColor" stroke-width="1"/>
+      <text x="205" y="218" text-anchor="middle" font-size="12" fill="currentColor">infrastructure/</text>
+
+      <rect x="510" y="40" width="290" height="38" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1"/>
+      <text x="655" y="64" text-anchor="middle" font-size="12" fill="currentColor">api/</text>
+      <rect x="510" y="84" width="290" height="38" rx="4" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="655" y="108" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">usecase/</text>
+      <rect x="510" y="128" width="290" height="60" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="655" y="152" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">domain/</text>
+      <text x="655" y="172" text-anchor="middle" font-size="11" fill="var(--muted)">entity · value · service · repository</text>
+      <rect x="510" y="194" width="290" height="38" rx="4" fill="var(--surface)" stroke="currentColor" stroke-width="1"/>
+      <text x="655" y="218" text-anchor="middle" font-size="12" fill="currentColor">infrastructure/</text>
+
+      <line x1="352" y1="103" x2="505" y2="103" stroke="var(--accent)" stroke-width="2" marker-end="url(#x1)"/>
+      <text x="430" y="94" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">許可</text>
+      <text x="430" y="122" text-anchor="middle" font-size="11" fill="var(--muted)">公開ユースケース経由のみ</text>
+
+      <line x1="352" y1="158" x2="505" y2="158" stroke="var(--no)" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <line x1="420" y1="148" x2="440" y2="168" stroke="var(--no)" stroke-width="2.5"/>
+      <line x1="440" y1="148" x2="420" y2="168" stroke="var(--no)" stroke-width="2.5"/>
+      <text x="430" y="186" text-anchor="middle" font-size="11" font-weight="700" fill="var(--no)">禁止</text>
+
+      <text x="430" y="272" text-anchor="middle" font-size="11" fill="var(--muted)">献立の生成には在庫が要る。だが必要なのは「在庫の一覧」という結果であって、</text>
+      <text x="430" y="290" text-anchor="middle" font-size="11" fill="var(--muted)">在庫コンテキストのエンティティそのものではない。</text>
+      <text x="430" y="314" text-anchor="middle" font-size="11" fill="var(--muted)">catalog / identity も同じ5つのディレクトリを持ち、同じ規則に従う。</text>
+    </svg>
+    <figcaption>コンテキストをまたいでよいのは <code>usecase/</code> どうしだけ。相手の <code>domain/</code> を直接 import した瞬間、2つのコンテキストは1つに融合し、将来の切り出しが不可能になる。境界はディレクトリで見えるが、コンパイラは守ってくれない — 規律で守るか、lint で機械的に強制する。</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>import 元</th><th>import してよい先</th></tr></thead>
+      <tbody>
+        <tr><td class="rowlab"><code>contexts/A/domain/</code></td><td><code>shared/domain/</code> のみ。<strong>他コンテキストは一切不可</strong></td></tr>
+        <tr><td class="rowlab"><code>contexts/A/usecase/</code></td><td><code>contexts/A/domain/</code> と <code>contexts/B/usecase/</code>（公開されたユースケースのみ）</td></tr>
+        <tr><td class="rowlab"><code>contexts/A/infrastructure/</code></td><td><code>contexts/A/domain/</code> のみ</td></tr>
+        <tr><td class="rowlab"><code>contexts/A/api/</code></td><td><code>contexts/A/usecase/</code> のみ</td></tr>
+        <tr><td class="rowlab"><code>main.ts</code></td><td>すべて（composition root）</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-note" style="margin-top:14px"><strong>この規則は lint で強制することを推奨する。</strong>垂直分割の弱点は、層の違反が「隣のディレクトリ」で起きるため目視で気づきにくいことにある。ESLint の import 制限や dependency-cruiser のようなツールで、上の表をそのまま設定に落とす。</p>
+
   <h2 style="font-size:1.1rem; margin-top:36px; font-family:'Noto Sans JP',sans-serif; font-weight:700">ディレクトリ構成</h2>
-  <pre>src/
-├─ <b>domain/</b>                    <span>← 何も import しない。フレームワーク非依存</span>
-│  ├─ shared/HouseholdId.ts
-│  ├─ meal/
-│  │  ├─ MealIdea.ts  MealIngredient.ts  CookingStep.ts  CookingRecord.ts
-│  │  ├─ Suggestion.ts  PantrySnapshot.ts
-│  │  ├─ MealCoverageService.ts
-│  │  ├─ <i>MealIdeaRepository.ts</i>     <span>← interface のみ</span>
-│  │  ├─ <i>SuggestionRepository.ts</i>   <span>← interface のみ</span>
-│  │  └─ <i>MealIdeaGenerator.ts</i>      <span>← interface のみ（生成ポート）</span>
-│  ├─ pantry/    StockItem.ts  <i>StockItemRepository.ts</i>
-│  └─ catalog/   Ingredient.ts  <i>IngredientRepository.ts</i>
+  <pre>リポジトリルート
+├─ <b>apps/web/</b>                  <span>React + Vite（PWA）— API のクライアント</span>
+│  ├─ src/features/meal/       <span>画面もコンテキスト単位で切る</span>
+│  ├─ src/features/pantry/
+│  ├─ src/apiClient/
+│  ├─ public/manifest.webmanifest
+│  └─ vite.config.ts           <span>vite-plugin-pwa</span>
 │
-├─ <b>application/</b>               <span>← domain のみ import 可</span>
-│  ├─ meal/  GenerateSuggestionUseCase.ts  ListMealIdeasUseCase.ts
-│  │         RecordCookingUseCase.ts
-│  ├─ pantry/ RegisterStockItemUseCase.ts  ListStockItemsUseCase.ts
-│  └─ dto/   <span>入出力 DTO。ドメインオブジェクトを外に出さない</span>
+├─ <b>apps/api/</b>                  <span>Hono on Cloudflare Workers</span>
+│  └─ src/
+│     ├─ <b>contexts/meal/</b>       <span>← コアドメイン</span>
+│     │  ├─ domain/
+│     │  │  ├─ entity/       Meal.ts  Suggestion.ts
+│     │  │  ├─ value/        MealId.ts  MealIngredient.ts  CookingStep.ts
+│     │  │  │                CookingRecord.ts  PantrySnapshot.ts
+│     │  │  ├─ service/      MealCoverageService.ts  CookableMealFinder.ts
+│     │  │  ├─ <i>repository/</i>   MealRepository.ts  SuggestionRepository.ts
+│     │  │  └─ <i>port/</i>         MealGenerator.ts
+│     │  ├─ usecase/         SuggestMeals.ts  RegenerateMeals.ts
+│     │  │                   ListMeals.ts  RecordCooking.ts
+│     │  ├─ infrastructure/  DbMealRepository.ts  LlmMealGenerator.ts
+│     │  │                   MealResponseParser.ts   <span>← 腐敗防止層</span>
+│     │  └─ api/             routes.ts
+│     │
+│     ├─ contexts/pantry/     <span>同じ5つのディレクトリを持つ</span>
+│     ├─ contexts/catalog/    <span>同じ</span>
+│     ├─ contexts/identity/   <span>同じ</span>
+│     │
+│     ├─ shared/domain/       HouseholdId.ts  Clock.ts
+│     └─ <b>main.ts</b>             <span>composition root — 全層を知る唯一の場所</span>
 │
-├─ <b>infrastructure/</b>            <span>← domain / application を import 可</span>
-│  ├─ persistence/  DbMealIdeaRepository.ts  DbStockItemRepository.ts
-│  └─ llm/          LlmMealIdeaGenerator.ts   <span>← 腐敗防止層はここ</span>
-│                   MealIdeaResponseParser.ts
-│
-├─ <b>presentation/</b>              <span>← application のみ import 可</span>
-│  ├─ http/  ハンドラ + Request → DTO 変換
-│  └─ web/   UI
-│
-└─ <b>main.ts</b>                    <span>← composition root。全層を知る唯一の場所</span></pre>
+└─ <b>packages/contract/</b>         <span>API の型定義。web と api で共有する</span>
+
+<i>斜体</i> のディレクトリは interface だけを置く。<b>domain/ は何も import しない。</b></pre>
 </section>
 
 <section>
@@ -275,13 +355,19 @@
     <a href="#adr-003"><span class="n">ADR-003</span><span>ユースケースを HTTP API として公開し、UI をその一クライアントに限定する</span><span class="s">承認</span></a>
     <a href="#adr-004"><span class="n">ADR-004</span><span>モジュラーモノリスとして実装する</span><span class="s">承認</span></a>
     <a href="#adr-005"><span class="n">ADR-005</span><span>LLM を腐敗防止層の背後に隔離する</span><span class="s">承認</span></a>
-    <a href="#adr-006"><span class="n">ADR-006</span><span>献立案を永続化し、再生成を明示操作に限定する</span><span class="s">承認</span></a>
+    <a href="#adr-006"><span class="n">ADR-006</span><span>献立を永続化し、再生成を明示操作に限定する</span><span class="s">承認</span></a>
     <a href="#adr-007"><span class="n">ADR-007</span><span>在庫品を集約ルートとし、同一食材を統合しない</span><span class="s">承認</span></a>
     <a href="#adr-008"><span class="n">ADR-008</span><span>集約をまたぐ参照は識別子で行う</span><span class="s">承認</span></a>
     <a href="#adr-009"><span class="n">ADR-009</span><span>材料の充足判定を永続化せず都度算出する</span><span class="s">承認</span></a>
     <a href="#adr-010"><span class="n">ADR-010</span><span>分量を構造化せず自由文字列として扱う</span><span class="s">承認</span></a>
     <a href="#adr-011"><span class="n">ADR-011</span><span>MVP ではドメインイベントを導入しない</span><span class="s">承認</span></a>
-    <a href="#adr-012"><span class="n">ADR-012</span><span>技術スタックの選定</span><span class="s">未決</span></a>
+    <a href="#adr-012"><span class="n">ADR-012</span><span>技術スタックの選定</span><span class="s">置き換え済み</span></a>
+    <a href="#adr-013"><span class="n">ADR-013</span><span>コンテキストごとに垂直にディレクトリを切る</span><span class="s">承認</span></a>
+    <a href="#adr-014"><span class="n">ADR-014</span><span>React + Vite の SPA とし、Next.js を採用しない</span><span class="s">承認</span></a>
+    <a href="#adr-015"><span class="n">ADR-015</span><span>サーバサイドを Hono + Cloudflare Workers とする</span><span class="s">承認</span></a>
+    <a href="#adr-016"><span class="n">ADR-016</span><span>PWA 化する。オフライン対応はアプリシェルに限る</span><span class="s">承認</span></a>
+    <a href="#adr-017"><span class="n">ADR-017</span><span>既存の献立の再利用を優先し、LLM 呼び出しを最後の手段とする</span><span class="s">承認</span></a>
+    <a href="#adr-018"><span class="n">ADR-018</span><span>ユビキタス言語の中核を「献立 / Meal」とする</span><span class="s">承認</span></a>
   </div>
 </section>
 
@@ -302,7 +388,7 @@
     <div class="adr-head"><span class="adr-id">ADR-002</span><strong>リポジトリとポートのインターフェースをドメイン層に置く</strong><span class="status">承認</span></div>
     <div class="adr-body"><dl>
       <div class="adr-row"><dt>状況</dt><dd>ドメイン層はデータの永続化と献立の生成を必要とするが、その手段（DB、LLM API）は外側の関心事である。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd><code>MealIdeaRepository</code> <code>StockItemRepository</code> <code>MealIdeaGenerator</code> をドメイン層に<strong>インターフェースとして</strong>定義し、インフラ層がこれを実装する。実装の注入は composition root で行う。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd><code>MealRepository</code> <code>StockItemRepository</code> <code>MealGenerator</code> をドメイン層に<strong>インターフェースとして</strong>定義し、インフラ層がこれを実装する。実装の注入は composition root で行う。</dd></div>
       <div class="adr-row"><dt>理由</dt><dd>依存関係逆転の実体。インターフェースを所有するのが呼ぶ側（ドメイン）であることにより、ドメイン層のソースコードに DB や HTTP クライアントの import が1行も現れなくなる。</dd></div>
       <div class="adr-row"><dt>結果</dt><dd>ドメイン層のテストが実 DB・実 API なしで書ける。反面、インターフェースの設計を誤ると全実装に波及するため、メソッドは<strong>ドメインの語彙で命名する</strong>（<code>findByHousehold</code> であって <code>selectWhere</code> ではない）。</dd></div>
     </dl></div>
@@ -332,19 +418,19 @@
     <div class="adr-head"><span class="adr-id">ADR-005</span><strong>LLM を腐敗防止層の背後に隔離する</strong><span class="status">承認</span></div>
     <div class="adr-body"><dl>
       <div class="adr-row"><dt>状況</dt><dd>献立の生成を LLM に委ねる（要件定義 第6章）。LLM の応答は形式が揺れうるうえ、将来は自前レシピ DB への差し替えも想定される。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd>ドメイン層のポート <code>MealIdeaGenerator</code> をインフラ層の <code>LlmMealIdeaGenerator</code> が実装する。応答の解析と検証は <code>MealIdeaResponseParser</code> が担い、<strong>検証を通らない応答はドメイン層に渡さない</strong>。プロンプト文字列・JSON・モデル名がドメイン層に現れてはならない。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>ドメイン層のポート <code>MealGenerator</code> をインフラ層の <code>LlmMealGenerator</code> が実装する。応答の解析と検証は <code>MealResponseParser</code> が担い、<strong>検証を通らない応答はドメイン層に渡さない</strong>。プロンプト文字列・JSON・モデル名がドメイン層に現れてはならない。</dd></div>
       <div class="adr-row"><dt>理由</dt><dd>外部システムの都合をドメインモデルに侵入させないため。生成方式を差し替えるとき、書き換えるのはこのクラス1つで済む。</dd></div>
       <div class="adr-row"><dt>結果</dt><dd>変換層のぶん記述が増える。また、応答が検証を通らなかった場合の扱い（再試行するか、件数を減らして返すか）を ACL 内で決める必要がある。<strong>現時点では「ユーザーに再試行を促す」とし、自動リトライは行わない。</strong></dd></div>
     </dl></div>
   </div>
 
   <div class="adr" id="adr-006">
-    <div class="adr-head"><span class="adr-id">ADR-006</span><strong>献立案を永続化し、再生成を明示操作に限定する</strong><span class="status">承認</span></div>
+    <div class="adr-head"><span class="adr-id">ADR-006</span><strong>献立を永続化し、再生成を明示操作に限定する</strong><span class="status">承認</span></div>
     <div class="adr-body"><dl>
       <div class="adr-row"><dt>状況</dt><dd>LLM は同じ在庫でも毎回異なる献立を返す。利用者は多様性を歓迎しているが、画面を戻るたびに候補が入れ替わるのは不具合に見える。加えて生成のたびに費用が発生する。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd>生成した献立案をすべて永続化する。画面を開いたときは保存済みの最新の提案を表示し、生成 API を呼ばない。新しい候補は「他の候補を見る」等の明示操作でのみ生成する。在庫が変わらない限り再生成しない（確定事項 C-7）。</dd></div>
-      <div class="adr-row"><dt>理由</dt><dd>体験の安定と費用の抑制が同じ手段で両立する。さらに、蓄積した献立案は「以前見た献立」「つくった献立」という機能そのものになり、将来の自前レシピ DB の初期データにもなる。</dd></div>
-      <div class="adr-row"><dt>結果</dt><dd>献立案が単調増加する。保持期間の方針が必要になる（未決 Q-2）。また「表示は速く、生成は待たせてよい」という性能要件の分離が前提になる。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>生成した献立をすべて永続化する。画面を開いたときは保存済みの最新の提案を表示し、生成 API を呼ばない。新しい候補は「他の候補を見る」等の明示操作でのみ生成する。在庫が変わらない限り再生成しない（確定事項 C-7）。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>体験の安定と費用の抑制が同じ手段で両立する。さらに、蓄積した献立は「以前見た献立」「つくった献立」という機能そのものになり、将来の自前レシピ DB の初期データにもなる。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>献立が単調増加する。保持期間の方針が必要になる（未決 Q-2）。また「表示は速く、生成は待たせてよい」という性能要件の分離が前提になる。</dd></div>
     </dl></div>
   </div>
 
@@ -361,8 +447,8 @@
   <div class="adr" id="adr-008">
     <div class="adr-head"><span class="adr-id">ADR-008</span><strong>集約をまたぐ参照は識別子で行う</strong><span class="status">承認</span></div>
     <div class="adr-body"><dl>
-      <div class="adr-row"><dt>状況</dt><dd><code>Suggestion</code> は3件の <code>MealIdea</code> を参照する。オブジェクト参照を持たせると、読み込み範囲が際限なく広がる。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd>集約をまたぐ参照はすべて識別子（<code>MealIdeaId</code> 等）で保持する。オブジェクト参照を持たない。1トランザクションで更新してよい集約は1つまでとする。</dd></div>
+      <div class="adr-row"><dt>状況</dt><dd><code>Suggestion</code> は3件の <code>Meal</code> を参照する。オブジェクト参照を持たせると、読み込み範囲が際限なく広がる。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>集約をまたぐ参照はすべて識別子（<code>MealId</code> 等）で保持する。オブジェクト参照を持たない。1トランザクションで更新してよい集約は1つまでとする。</dd></div>
       <div class="adr-row"><dt>理由</dt><dd>集約の境界が実際の一貫性の境界と一致し、読み込みと更新の範囲が予測可能になる。</dd></div>
       <div class="adr-row"><dt>結果</dt><dd>画面表示のためにリポジトリを複数回呼ぶ場面が出る。<strong>その解決に集約を結合させてはならず、必要ならアプリケーション層に読み取り専用の問い合わせを追加する。</strong></dd></div>
     </dl></div>
@@ -371,10 +457,10 @@
   <div class="adr" id="adr-009">
     <div class="adr-head"><span class="adr-id">ADR-009</span><strong>材料の充足判定を永続化せず都度算出する</strong><span class="status">承認</span></div>
     <div class="adr-body"><dl>
-      <div class="adr-row"><dt>状況</dt><dd>「この献立は在庫で作れるか」は献立案と在庫の両方に依存する。在庫は献立案の生成後も変化し続ける。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd>充足の結果を献立案に保存せず、表示のたびに <code>MealCoverageService</code> が現在の在庫と突き合わせて算出する。</dd></div>
-      <div class="adr-row"><dt>理由</dt><dd>保存すると在庫の変化のたびに全献立案を更新する必要が生じ、更新漏れが必ず起きる。導出可能な値は導出する。</dd></div>
-      <div class="adr-row"><dt>結果</dt><dd>一覧表示のたびに計算が走る。献立案が数千件に達すると問題になりうるが、その規模は当面想定しない。<strong>「以前つくった献立」の一覧では充足を算出しない</strong>ことで負荷を抑える。</dd></div>
+      <div class="adr-row"><dt>状況</dt><dd>「この献立は在庫で作れるか」は献立と在庫の両方に依存する。在庫は献立の生成後も変化し続ける。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>充足の結果を献立に保存せず、表示のたびに <code>MealCoverageService</code> が現在の在庫と突き合わせて算出する。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>保存すると在庫の変化のたびに全献立を更新する必要が生じ、更新漏れが必ず起きる。導出可能な値は導出する。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>一覧表示のたびに計算が走る。献立が数千件に達すると問題になりうるが、その規模は当面想定しない。<strong>「以前つくった献立」の一覧では充足を算出しない</strong>ことで負荷を抑える。</dd></div>
     </dl></div>
   </div>
 
@@ -399,11 +485,70 @@
   </div>
 
   <div class="adr" id="adr-012">
-    <div class="adr-head"><span class="adr-id">ADR-012</span><strong>技術スタックの選定</strong><span class="status open">未決</span></div>
+    <div class="adr-head"><span class="adr-id">ADR-012</span><strong>技術スタックの選定</strong><span class="status open">置き換え済み</span></div>
     <div class="adr-body"><dl>
-      <div class="adr-row"><dt>状況</dt><dd>Nuxt / Vue（実務での主戦力・最短で作れる）と Next.js / React（学習中・題材としての価値）のいずれかを選ぶ。ホスティングは無料枠のある構成を優先する。</dd></div>
-      <div class="adr-row"><dt>決定</dt><dd><strong>未決。</strong>「このプロジェクトが使うためのものか、学ぶためのものか」の回答を待つ。</dd></div>
-      <div class="adr-row"><dt>備考</dt><dd>ADR-001〜011 はいずれも特定のフレームワークに依存しない。ドメイン層とアプリケーション層は<strong>フレームワークを選ぶ前に着手できる</strong>ため、この未決はプロジェクト全体を止めない。</dd></div>
+      <div class="adr-row"><dt>状況</dt><dd>Nuxt / Vue と Next.js / React のいずれかを選ぶ論点として起票した。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd><strong>ADR-014（フロントエンド）と ADR-015（サーバサイド）に置き換えられた。</strong>いずれの選択肢も採らず、React + Vite と Hono + Cloudflare Workers の組み合わせに決定した。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-013">
+    <div class="adr-head"><span class="adr-id">ADR-013</span><strong>コンテキストごとに垂直にディレクトリを切る</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>当初は層でトップレベルを切っていた（<code>domain/</code> <code>application/</code> …）。この形では、献立に1つ機能を足すたびに4つの離れたディレクトリを行き来することになり、<strong>コンテキストの境界がディレクトリ上に一切現れない</strong>。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>トップレベルを境界づけられたコンテキストで切り、層はその内側に置く。各コンテキストは <code>domain/</code> <code>usecase/</code> <code>infrastructure/</code> <code>api/</code> の4つを持ち、<code>domain/</code> の中をさらに <code>entity/</code> <code>value/</code> <code>service/</code> <code>repository/</code> <code>port/</code> に分ける。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>変更が届く単位はコンテキストであって層ではない。境界がディレクトリとして目に見えるため、ADR-004 のモジュラーモノリスの規律が守りやすく、切り出しが必要になったときもディレクトリごと移せる。<strong>ユースケースとエンティティを別ディレクトリに保つことで、層の区別は垂直分割後も失われない。</strong></dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>層の違反が「隣のディレクトリ」で起きるため目視で気づきにくくなる。<strong>依存ルールは lint（ESLint の import 制限や dependency-cruiser）で機械的に強制することを推奨する。</strong>また各コンテキストで同じ5つのディレクトリを作るため、小さなコンテキストではやや冗長になる。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-014">
+    <div class="adr-head"><span class="adr-id">ADR-014</span><strong>React + Vite の SPA とし、Next.js を採用しない</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>React を選ぶとして、Next.js を使うかどうか。本アプリはログイン必須で、扱うのは個人の在庫データである。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>React + Vite の SPA とする。Next.js は採用しない。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>3つある。<strong>(1)</strong> ログイン後のプライベートな画面しかなく、SEO も SSR も価値を生まない。<strong>(2)</strong> Next.js の最大の利点であるサーバ統合（サーバアクション等）は、UI からサーバ処理を直接呼べる仕組みであり、<strong>ADR-003 が避けようとしている依存そのもの</strong>である。使わないなら採用する理由が薄く、使えば決定に反する。<strong>(3)</strong> SPA は構造上「API のクライアント」でしかないため、ADR-003 の境界が意識せずとも守られる。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>初回読み込みは SSR より遅い。ログイン後に使うアプリなので許容し、PWA のキャッシュ（ADR-016）で2回目以降を速くする。公開ページや SEO が必要になった時点で見直す。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-015">
+    <div class="adr-head"><span class="adr-id">ADR-015</span><strong>サーバサイドを Hono + Cloudflare Workers とする</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>LLM の API キーをクライアントに置けない（NFR-10）ため、サーバが必須。SPA を選んだ結果、サーバは API 専任になり、<strong>ドメイン層とユースケース層はここに置かれる</strong>。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>Hono を Cloudflare Workers 上で動かす。<code>apps/api/</code> がドメイン層・ユースケース層・インフラ層を含み、<code>apps/web/</code> はその HTTP クライアントに徹する。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>無料枠が広く「ランニングコストをなるべく安く」という要求に合う。Web 標準 API ベースでフレームワークへのロックインが軽い。TypeScript なので、ドメイン層をフロントと同じ言語で書け、<code>packages/contract/</code> で API の型を共有できる。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>Workers には実行時間と CPU の制限がある。<strong>LLM の呼び出しは数十秒かかりうるため、制限に収まるかを実装初期に確認する必要がある。</strong>収まらない場合はストリーミング応答か、生成を非同期化して結果をポーリングする形に変える。データベースは別途選定（未決）。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-016">
+    <div class="adr-head"><span class="adr-id">ADR-016</span><strong>PWA 化する。オフライン対応はアプリシェルに限る</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>台所で使うため、ホーム画面から即起動できることに価値がある。一方、データのオフライン書き込みを許すと同期と競合解決が必要になり、MVP の規模を大きく超える。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>マニフェストとサービスワーカーを備え、ホーム画面に追加できるようにする。キャッシュするのは<strong>アプリの外枠（HTML・CSS・JS）だけ</strong>とし、データのオフライン読み書きは行わない。オフライン時はその旨を表示して操作を止める。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>PWA 化の目的は<strong>設置と起動の速さ</strong>であって、オフライン動作ではない。目的をここで区切ることで、同期の複雑さを丸ごと回避できる。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>2つの制約を受け入れる。<strong>(1)</strong> iOS の Safari は <code>beforeinstallprompt</code> を実装していないため、ワンタップのインストールバナーを出せない。利用者が自分で「共有 → ホーム画面に追加」をたどる必要があり、<strong>案内 UI がなければ事実上インストールされない</strong>（FR-40）。<strong>(2)</strong> iOS で Web プッシュ通知が届くのはホーム画面に追加された場合のみで、タブで開いているだけでは届かない。期限通知（FR-15）は Could のまま据え置く。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-017">
+    <div class="adr-head"><span class="adr-id">ADR-017</span><strong>既存の献立の再利用を優先し、LLM 呼び出しを最後の手段とする</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>ADR-006 で在庫が変わらない限り再生成しないことは決めたが、<strong>在庫が変われば必ず生成が走る</strong>。一方その頃には、今日の在庫でそのまま作れる献立が手元に貯まっている。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd>提案の組み立てを3段で試みる。<strong>(1)</strong> 在庫が前回と同じなら保存済みの提案を返す。<strong>(2)</strong> 違えば、既存の献立から現在の在庫で不足0件のものを選ぶ。<strong>(3)</strong> それで3件に満たない分だけを LLM に生成させる。「他の候補を見る」はこの経路に乗せず、常に新規生成する。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>費用と待ち時間の両方が同時に下がる。しかも<strong>使い続けるほど手持ちが増えて再利用率が上がる</strong>ため、1回あたりのコストは時間とともに下がっていく。ユーザーにとっても「前に見たあれが今日作れる」は有用な情報であり、機能の劣化ではない。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>3つの帰結を引き受ける。<strong>(1)</strong> 再利用の精度が充足判定に依存し、それは食材名の完全一致で行っている（確定事項 C-6）。<strong>ここが弱いと仕組み全体が働かないため、食材カタログの別名データが実質的な前提条件になる。</strong> <strong>(2)</strong> 再利用は明示表示が必須（FR-35）。黙って混ぜると同じ献立が出たとしか見えない。<strong>(3)</strong> 同じ献立が出続けないよう、直近の提案に出したものを除外する規則が要る（C-11）。</dd></div>
+    </dl></div>
+  </div>
+
+  <div class="adr" id="adr-018">
+    <div class="adr-head"><span class="adr-id">ADR-018</span><strong>ユビキタス言語の中核を「献立 / Meal」とする</strong><span class="status">承認</span></div>
+    <div class="adr-body"><dl>
+      <div class="adr-row"><dt>状況</dt><dd>生成物の呼称が定まらないと全レイヤーの識別子が決まらない。当初の「献立案 / <code>MealIdea</code>」は文書としては正確だが、UI に置くと固い。</dd></div>
+      <div class="adr-row"><dt>決定</dt><dd><strong>献立 / <code>Meal</code>。</strong>「レシピ」「メニュー」「候補」「料理」「献立案」はすべて予約語として使用を禁じる。</dd></div>
+      <div class="adr-row"><dt>理由</dt><dd>アプリの価値（献立が決まる）と語が一致し、UI が「前に見た献立」「作った献立」と自然に書ける。<code>Meal</code> と <code>Suggestion</code> は識別子として十分に区別でき、コンテキスト名「献立コンテキスト」とも衝突しない。</dd></div>
+      <div class="adr-row"><dt>結果</dt><dd>「レシピ / <code>Recipe</code>」を空けておける。<strong>ADR-006 の移行先である自前レシピ DB を将来持ったとき、<code>Recipe</code>（検証済みの既存レシピ）と <code>Meal</code>（この世帯のために生成された献立）を別概念として導入できる。</strong>いま「レシピ」を使ってしまうと、そのときに名前が足りなくなる。</dd></div>
     </dl></div>
   </div>
 </section>
