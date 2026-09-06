@@ -345,16 +345,6 @@
 └─ <b>packages/contract/</b>         <span>API の型定義。web と api で共有する</span>
 
 <i>斜体</i> のディレクトリは interface だけを置く。<b>domain/ は何も import しない。</b></pre>
-
-  <div class="adr" style="margin-top:20px">
-    <div class="adr-head"><span class="tag" style="background:var(--no);color:#fff">よくある誤解</span><strong><code>usecase/</code> は <code>domain/</code> の下ではない</strong></div>
-    <div class="adr-body"><dl>
-      <div class="adr-row"><dt>誤り</dt><dd><code>contexts/meal/domain/usecase/</code> — ユースケースをドメイン層の中に置く形。</dd></div>
-      <div class="adr-row"><dt>正しい</dt><dd><code>contexts/meal/usecase/</code> — <code>domain/</code> と<strong>兄弟</strong>に置く。</dd></div>
-      <div class="adr-row"><dt>理由</dt><dd>依存の向きが <code>usecase/ → domain/</code> の一方向だからである。<code>domain/</code> の中に置くと、ドメイン層が自分の内側にユースケースを抱えることになり、<strong>「ドメイン層は何も import しない」という規則が表現できなくなる</strong>。lint で依存を強制する際も、この2つが別ディレクトリであることが前提になる。</dd></div>
-      <div class="adr-row"><dt>語の整理</dt><dd>「ドメイン」が2つの意味で使われるのが混乱の原因。<strong>業務領域としてのドメイン</strong>（献立・在庫）は <code>contexts/meal/</code> — つまりコンテキストの単位。<strong>層としてのドメイン層</strong>は <code>contexts/meal/domain/</code>。「各ドメインごとにユースケースがある」は正しく、その置き場所が <code>contexts/meal/usecase/</code> である。</dd></div>
-    </dl></div>
-  </div>
 </section>
 
 <section>
